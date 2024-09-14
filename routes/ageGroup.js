@@ -7,6 +7,7 @@ const {
 
 const router = express.Router();
 
+
 router.post('/create', createAgeGroup);
 router.get('/records', getAllAgeGroups);
 router.post('/update', update);
