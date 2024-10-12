@@ -84,8 +84,6 @@ async function registerUser(req, res) {
 
   if (!address)
     validations.push({ key: "address", message: "Address is required" });
-  if (!password)
-    validations.push({ key: "password", message: "Password is required" });
   if (email && !emailRegex.test(email))
     validations.push({ key: "email", message: "Email is not valid" });
 
