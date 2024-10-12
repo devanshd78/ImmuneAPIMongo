@@ -9,7 +9,6 @@ const Appointment = require("../models/Appointments");
 const { sendDoctorNotification } = require("./Notification/docterNotification");
 const { sendUserNotification } = require("./Notification/userNotification");
 
-
 let client = new MongoClient(process.env.UU, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -293,7 +292,7 @@ async function registerDoctor(req, res) {
     ifscCode,
     accountHolderName,
     bankName,
-    phoneNumber
+    phoneNumber,
   } = req.body;
 
   let validations = [];
@@ -318,23 +317,48 @@ async function registerDoctor(req, res) {
   }
 
   if (!name) validations.push({ key: "name", message: "Name is required" });
-  if (!hospital) validations.push({ key: "hospital", message: "Hospital is required" });
+  if (!hospital)
+    validations.push({ key: "hospital", message: "Hospital is required" });
   if (!about) validations.push({ key: "about", message: "About is required" });
   if (!type) validations.push({ key: "type", message: "Type is required" });
-  if (!patients) validations.push({ key: "patients", message: "Patients is required" });
-  if (!experience) validations.push({ key: "experience", message: "Experience is required" });
-  if (!specialist) validations.push({ key: "specialist", message: "Specialist is required" });
-  if (!videoFee) validations.push({ key: "videoFee", message: "Video Fee is required" });
-  if (!appointmentFee) validations.push({ key: "appointmentFee", message: "Appointment Fee is required" });
-  if (!location) validations.push({ key: "location", message: "Location is required" });
-  if (!workinghours) validations.push({ key: "workinghours", message: "Working Hours is required" });
-  if (!accountNumber) validations.push({ key: "accountNumber", message: "Account Number is required" });
-  if (!ifscCode) validations.push({ key: "ifscCode", message: "IFSC Code is required" });
-  if (!accountHolderName) validations.push({ key: "accountHolderName", message: "Account Holder Name is required" });
-  if (!bankName) validations.push({ key: "bankName", message: "Bank Name is required" });
-  if (!otp) validations.push({ key: "otp", message: "OTP is required" });
+  if (!patients)
+    validations.push({ key: "patients", message: "Patients is required" });
+  if (!experience)
+    validations.push({ key: "experience", message: "Experience is required" });
+  if (!specialist)
+    validations.push({ key: "specialist", message: "Specialist is required" });
+  if (!videoFee)
+    validations.push({ key: "videoFee", message: "Video Fee is required" });
+  if (!appointmentFee)
+    validations.push({
+      key: "appointmentFee",
+      message: "Appointment Fee is required",
+    });
+  if (!location)
+    validations.push({ key: "location", message: "Location is required" });
+  if (!workinghours)
+    validations.push({
+      key: "workinghours",
+      message: "Working Hours is required",
+    });
+  if (!accountNumber)
+    validations.push({
+      key: "accountNumber",
+      message: "Account Number is required",
+    });
+  if (!ifscCode)
+    validations.push({ key: "ifscCode", message: "IFSC Code is required" });
+  if (!accountHolderName)
+    validations.push({
+      key: "accountHolderName",
+      message: "Account Holder Name is required",
+    });
+  if (!bankName)
+    validations.push({ key: "bankName", message: "Bank Name is required" });
+  //if (!otp) validations.push({ key: "otp", message: "OTP is required" });
 
-  if (!req.file || !req.file.buffer) validations.push({ key: "img", message: "Image is required" });
+  if (!req.file || !req.file.buffer)
+    validations.push({ key: "img", message: "Image is required" });
 
   if (validations.length) {
     res.status(400).json({ status: "error", validations: validations });
@@ -350,7 +374,9 @@ async function registerDoctor(req, res) {
     const existingUser = await collection.findOne({ phoneNumber });
 
     if (existingUser) {
-      res.status(400).json({ status: "error", message: "Phone Number already exists" });
+      res
+        .status(400)
+        .json({ status: "error", message: "Phone Number already exists" });
       return;
     }
 
@@ -396,7 +422,7 @@ async function registerDoctor(req, res) {
             accountHolderName,
             bankName,
             isApproved: 0,
-            phoneNumber
+            phoneNumber,
           });
 
           if (result.acknowledged) {
@@ -406,13 +432,17 @@ async function registerDoctor(req, res) {
               id: newId,
             });
           } else {
-            res.status(400).json({ status: "error", message: "Registration failed" });
+            res
+              .status(400)
+              .json({ status: "error", message: "Registration failed" });
           }
         } else {
           res.status(400).json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
+        res
+          .status(400)
+          .json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
       // Generate and send OTP
@@ -435,7 +465,6 @@ async function registerDoctor(req, res) {
     //await client.close();
   }
 }
-
 
 async function createSchedule(req, res) {
   try {
@@ -700,7 +729,6 @@ async function loginDoctor(req, res) {
     return;
   }
 
-
   try {
     await client.connect();
     const db = client.db("ImmunePlus");
@@ -708,7 +736,10 @@ async function loginDoctor(req, res) {
 
     const user = await collection.findOne({ phoneNumber: phoneNumber });
     if (user.isApproved != 1) {
-      res.status(400).json({ status: "error", validations: "Your Account is not Approved yet." });
+      res.status(400).json({
+        status: "error",
+        validations: "Your Account is not Approved yet.",
+      });
       return;
     }
     if (otp) {
@@ -744,7 +775,9 @@ async function loginDoctor(req, res) {
               user: userInfo,
             });
           } else {
-            res.status(400).json({ status: "error", message: "Invalid Phone Number" });
+            res
+              .status(400)
+              .json({ status: "error", message: "Invalid Phone Number" });
           }
 
           //client.close();
@@ -752,7 +785,9 @@ async function loginDoctor(req, res) {
           res.status(400).json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
+        res
+          .status(400)
+          .json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
       // Generate and send OTP
@@ -773,7 +808,6 @@ async function loginDoctor(req, res) {
     });
   }
 }
-
 
 async function updateDoctor(req, res) {
   try {
@@ -1382,25 +1416,30 @@ async function searchFilterDoctors(req, res) {
       },
       {
         $lookup: {
-          from: 'doctoravailabilities', // Name of the schedule collection
-          localField: '_id', // Doctor's _id field
-          foreignField: 'doctorId', // doctorId in schedule
-          as: 'schedules', // Alias for the joined data
+          from: "doctoravailabilities", // Name of the schedule collection
+          localField: "_id", // Doctor's _id field
+          foreignField: "doctorId", // doctorId in schedule
+          as: "schedules", // Alias for the joined data
         },
       },
       {
         $addFields: {
           schedules: {
             $filter: {
-              input: '$schedules',
-              as: 'schedule',
+              input: "$schedules",
+              as: "schedule",
               cond: {
                 $and: [
-                  filterDate && filterDate !== '0'
-                    ? { $eq: [{ $toDate: '$$schedule.date' }, new Date(filterDate)] } // Match by date
+                  filterDate && filterDate !== "0"
+                    ? {
+                        $eq: [
+                          { $toDate: "$$schedule.date" },
+                          new Date(filterDate),
+                        ],
+                      } // Match by date
                     : { $literal: true },
-                  time && time !== '0'
-                    ? { $eq: ['$$schedule.time', time] } // Match by time
+                  time && time !== "0"
+                    ? { $eq: ["$$schedule.time", time] } // Match by time
                     : { $literal: true },
                 ],
               },
@@ -1410,7 +1449,7 @@ async function searchFilterDoctors(req, res) {
       },
       {
         $match: {
-          'schedules.0': { $exists: true }, // Ensure at least one matching schedule exists
+          "schedules.0": { $exists: true }, // Ensure at least one matching schedule exists
         },
       },
     ];
@@ -1420,27 +1459,25 @@ async function searchFilterDoctors(req, res) {
 
     if (doctors.length > 0) {
       res.status(200).json({
-        status: 'success',
+        status: "success",
         data: doctors,
       });
     } else {
       res.status(404).json({
-        status: 'error',
-        message: 'No doctors found matching the criteria',
+        status: "error",
+        message: "No doctors found matching the criteria",
       });
     }
   } catch (error) {
     res.status(500).json({
-      status: 'error',
-      message: 'An error occurred during the search',
+      status: "error",
+      message: "An error occurred during the search",
       reason: error.message,
     });
   } finally {
     // await client.close();
   }
 }
-
-
 
 module.exports = {
   loginDoctor,
@@ -1464,5 +1501,5 @@ module.exports = {
   getBookingById,
   getSchedulebyIdDetails,
   searchDoctors,
-  searchFilterDoctors
+  searchFilterDoctors,
 };

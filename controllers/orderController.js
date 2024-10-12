@@ -22,8 +22,33 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 async function placeOrder(req, res) {
-  const { userId, products, location, prescription, totalPrice, quantity } =
-    req.body;
+  //   {
+  //     "userId":41122,
+  //     "products": [1],
+  //     "quantity":10,
+  //     "location":"H-141",
+  //     "totalPrice":"208.32",
+  //     "prescription": false,
+  //     "coupon":3,
+  //     "priceBreak":{ "totalProductPrice": 600,
+  //     "discount": 100,
+  //     "deliveryFee": 20,
+  //     "gst": 90,
+  //     "finalPrice": 610
+
+  //     }
+
+  // }
+  const {
+    userId,
+    products,
+    location,
+    prescription,
+    totalPrice,
+    quantity,
+    coupon,
+    priceBreak,
+  } = req.body;
 
   // Parse products and quantity
   let parsedProducts = [];
@@ -138,6 +163,8 @@ async function placeOrder(req, res) {
         assignedPartner: null,
         prescriptionImg: prescriptionImagePaths,
         otp: otp,
+        coupon: coupon,
+        priceBreak: priceBreak,
       };
 
       const paymentInfo = {

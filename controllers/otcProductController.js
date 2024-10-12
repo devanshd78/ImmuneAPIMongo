@@ -4,7 +4,6 @@ const path = require("path");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const client = new MongoClient(process.env.UU, {
-
   serverApi: {
     version: ServerApiVersion.v1,
     strict: true,
@@ -231,7 +230,10 @@ async function remove(req, res) {
     const db = client.db("ImmunePlus");
     const collection = db.collection("OTC");
 
+    const user = await collection.findOne({ _id: parseInt(id) });
+    console.log(user);
     const result = await collection.deleteOne({ _id: parseInt(id) });
+    console.log(result);
     if (result.deletedCount > 0) {
       res.status(200).json({ status: "success", message: "Product Deleted" });
     } else {
@@ -255,8 +257,6 @@ async function getProductById(req, res) {
     await client.connect();
     const db = client.db("ImmunePlus");
     const collection = db.collection("OTC");
-
-
     const product = await collection.find({ _id: parseInt(id) }).toArray();
     if (product.length === 0) {
       res.status(404).json({ status: "error", message: "Product not found" });

@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const User = require("../models/User");
+
 const client = new MongoClient(process.env.UU, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -25,20 +26,16 @@ async function sendOTP(phoneNumber, otp) {
     const options = {
       authorization: apiKey,
       message: `Your OTP is ${otp}. It is valid for 5 minutes.`,
-      numbers: [phoneNumber], // Pass numbers as an array
-      sender_id: "IMMPLUS", // Specify the sender ID here
+      numbers: [phoneNumber],
+      sender_id: "IMMPLUS",
     };
-    await fast2sms
-      .sendMessage(options)
-      .then((res) => {
-        console.log(res);
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-    // console.log('OTP sent successfully:', response);
+    const response = await fast2sms.sendMessage(options);
+    console.log("SMS Response:", response);
   } catch (error) {
-    console.error("Error sending OTP:", error.message);
+    console.error(
+      "Error sending OTP:",
+      error.response ? error.response.data : error.message
+    );
   }
 }
 
@@ -130,8 +127,22 @@ async function loginUser(req, res) {
 
 // User registration controller
 async function registerUser(req, res) {
+  // {
+  //   "id": "123",
+  //   "addresses": [
+  //     { "street": "123 New St", "city": "City A", "pincode": "123456" },
+  //     { "street": "456 Old St", "city": "City B", "pincode": "654321" }
+  //   ],
+  //   "fullName": "John Doe",
+  //   "email": "john.doe@example.com",
+  //   "gender": "male",
+  //   "state": "NY",
+  //   "pincode": "10001",
+  //   "phoneNumber": "1234567890"
+  // }
+
   const {
-    address,
+    addresses, // Change to addresses (an array)
     fullName,
     ageGroup,
     email,
@@ -140,7 +151,7 @@ async function registerUser(req, res) {
     pincode,
     phoneNumber,
     previousHistory,
-    otp // Added for OTP verification
+    otp, // Added for OTP verification
   } = req.body;
 
   let validations = [];
@@ -160,16 +171,27 @@ async function registerUser(req, res) {
     validations.push({ key: "phoneNumber", message: phoneNumMessage });
   }
 
-
-
-  if (!address) validations.push({ key: "address", message: "Address is required" });
-  if (!fullName) validations.push({ key: "fullName", message: "Full name is required" });
-  if (email && !emailRegex.test(email)) validations.push({ key: "email", message: "Email is not valid" });
-  if (!gender) validations.push({ key: "gender", message: "Gender is required" });
+  if (!addresses || addresses.length === 0)
+    validations.push({
+      key: "addresses",
+      message: "At least one address is required",
+    });
+  if (!fullName)
+    validations.push({ key: "fullName", message: "Full name is required" });
+  if (email && !emailRegex.test(email))
+    validations.push({ key: "email", message: "Email is not valid" });
+  if (!gender)
+    validations.push({ key: "gender", message: "Gender is required" });
   if (!state) validations.push({ key: "state", message: "State is required" });
-  if (!pincode) validations.push({ key: "pincode", message: "Pincode is required" });
-  if (!phoneNumber) validations.push({ key: "phoneNumber", message: "Phone number is required" });
-  if (!ageGroup) validations.push({ key: "ageGroup", message: "Age Group is required" });
+  if (!pincode)
+    validations.push({ key: "pincode", message: "Pincode is required" });
+  if (!phoneNumber)
+    validations.push({
+      key: "phoneNumber",
+      message: "Phone number is required",
+    });
+  if (!ageGroup)
+    validations.push({ key: "ageGroup", message: "Age Group is required" });
 
   if (validations.length) {
     res.status(400).json({ status: "error", validations: validations });
@@ -184,56 +206,56 @@ async function registerUser(req, res) {
 
     const existingUser = await collection.findOne({ phoneNumber });
     if (existingUser) {
-      res.status(400).json({ status: "error", validations: "Phone Number already exists." });
+      res
+        .status(400)
+        .json({ status: "error", validations: "Phone Number already exists." });
       return;
     }
+
     if (otp) {
-      // OTP verification
       const storedOtp = otpStorage[phoneNumber];
       if (storedOtp && Date.now() < storedOtp.expiry) {
         if (storedOtp.value === otp) {
-          // OTP verified, proceed with registration
+          const counter = await countersCollection.findOneAndUpdate(
+            { _id: "userId" },
+            { $inc: { seq: 1 } },
+            { upsert: true, returnDocument: "after" }
+          );
+          const newId = counter.seq;
 
+          const result = await collection.insertOne({
+            addresses, // Storing multiple addresses
+            fullName,
+            ageGroup,
+            email,
+            gender,
+            state,
+            pincode,
+            phoneNumber,
+            previousHistory,
+            _id: newId,
+          });
 
-
-          if (existingUser) {
-            res.status(400).json({ status: "error", message: "Phone Number already exists" });
-          } else {
-
-            const counter = await countersCollection.findOneAndUpdate(
-              { _id: "userId" },
-              { $inc: { seq: 1 } },
-              { upsert: true, returnDocument: "after" }
-            );
-            const newId = counter.seq;
-
-            const result = await collection.insertOne({
-              address,
-              fullName,
-              ageGroup,
-              email,
-              gender,
-              state,
-              pincode,
-              phoneNumber,
-              previousHistory,
-              _id: newId,
+          if (result.acknowledged === true) {
+            res.status(200).json({
+              status: "success",
+              message: "User registered successfully",
+              userInfo: result,
             });
-
-            if (result.acknowledged === true) {
-              res.status(200).json({ status: "success", message: "User registered successfully", userInfo: result });
-            } else {
-              res.status(400).json({ status: "error", message: "Registration failed" });
-            }
+          } else {
+            res
+              .status(400)
+              .json({ status: "error", message: "Registration failed" });
           }
         } else {
           res.status(400).json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
+        res
+          .status(400)
+          .json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
-      // Generate and send OTP
       const otp = crypto.randomInt(100000, 999999).toString();
       otpStorage[phoneNumber] = {
         value: otp,
@@ -249,6 +271,69 @@ async function registerUser(req, res) {
       message: "An error occurred during registration",
       reason: error.message,
     });
+  }
+}
+
+async function addEditAddressById(req, res) {
+  const { userId } = req.params; // Get userId from request params
+  const { newAddress, index } = req.body; // `newAddress` is the address to add/edit, `index` is optional
+
+  if (!userId) {
+    res.status(400).json({ status: "error", message: "User ID is required" });
+    return;
+  }
+
+  if (!newAddress) {
+    res.status(400).json({ status: "error", message: "Address is required" });
+    return;
+  }
+
+  try {
+    await client.connect();
+    const db = client.db("ImmunePlus");
+    const collection = db.collection("Users");
+
+    // Find the user by userId
+    const user = await collection.findOne({ _id: parseInt(userId) });
+
+    if (!user) {
+      res.status(404).json({ status: "error", message: "User not found" });
+      return;
+    }
+
+    let updatedAddresses = [...user.addresses]; // Copy existing addresses
+
+    // If an index is provided, update that specific address
+    if (index !== undefined && index >= 0 && index < updatedAddresses.length) {
+      updatedAddresses[index] = newAddress; // Edit the address at the specified index
+    } else {
+      // Otherwise, add the new address to the array
+      updatedAddresses.push(newAddress);
+    }
+
+    // Update the user's addresses in the database
+    const result = await collection.updateOne(
+      { _id: parseInt(userId) },
+      { $set: { addresses: updatedAddresses } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.status(200).json({
+        status: "success",
+        message: "Address updated successfully",
+        updatedAddresses,
+      });
+    } else {
+      res
+        .status(400)
+        .json({ status: "error", message: "Failed to update address" });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: "An error occurred while updating the address",
+      reason: error.message,
+    });
   } finally {
     //await client.close();
   }
@@ -257,7 +342,7 @@ async function registerUser(req, res) {
 async function updateUser(req, res) {
   const {
     id,
-    address,
+    addresses, // Now expects addresses as an array
     fullName,
     ageGroup,
     email,
@@ -267,16 +352,18 @@ async function updateUser(req, res) {
     phoneNumber,
     previousHistory,
   } = req.body;
+
   let validations = [];
-  let regex = /^(?=.*[0-9])(?=.*[!@#$%^&*])(?=.*[A-Z])(?=.*[a-z])/;
   let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  // Validate ID
   if (!id) validations.push({ key: "id", message: "User ID is required" });
 
-
+  // Validate email format if provided
   if (email && !emailRegex.test(email))
     validations.push({ key: "email", message: "Email is not valid" });
 
+  // Return validation errors if any
   if (validations.length) {
     res.status(400).json({ status: "error", validations: validations });
     return;
@@ -287,6 +374,7 @@ async function updateUser(req, res) {
     const db = client.db("ImmunePlus");
     const collection = db.collection("Users");
 
+    // Find user by id
     const user = await collection.findOne({ _id: id });
 
     if (!user) {
@@ -294,9 +382,11 @@ async function updateUser(req, res) {
       return;
     }
 
+    // Prepare fields for update
     const updatedFields = {};
 
-    if (address) updatedFields.address = address;
+    if (addresses && Array.isArray(addresses))
+      updatedFields.addresses = addresses;
     if (fullName) updatedFields.fullName = fullName;
     if (ageGroup) updatedFields.ageGroup = ageGroup;
     if (email) updatedFields.email = email;
@@ -306,7 +396,11 @@ async function updateUser(req, res) {
     if (phoneNumber) updatedFields.phoneNumber = phoneNumber;
     if (previousHistory) updatedFields.previousHistory = previousHistory;
 
-    const result = await collection.updateOne({ _id }, { $set: updatedFields });
+    // Update the user
+    const result = await collection.updateOne(
+      { _id: id },
+      { $set: updatedFields }
+    );
 
     if (result.modifiedCount > 0) {
       res
@@ -321,7 +415,7 @@ async function updateUser(req, res) {
     res.status(500).json({
       status: "error",
       message: "An error occurred during update",
-      reason: error,
+      reason: error.message,
     });
   } finally {
     // await client.close();
@@ -499,4 +593,5 @@ module.exports = {
   getUserbyId,
   getUserAppointment,
   dummyLoginUser,
+  addEditAddressById,
 };
