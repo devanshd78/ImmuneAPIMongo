@@ -41,7 +41,7 @@ const io = socketIo(server, {
     methods: ["GET", "POST"],
   },
 });
-const port = 6000;
+const port = 5000;
 
 // Configure CORS to allow requests from specific origins
 const corsOptions = {
