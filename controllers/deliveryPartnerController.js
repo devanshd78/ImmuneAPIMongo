@@ -3,6 +3,14 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require("uuid");
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
 
 let client = new MongoClient(process.env.UU, {
   serverApi: {
@@ -62,7 +70,7 @@ async function registerDelivery(req, res) {
     ifscCode,
     accountHolderName,
     bankName,
-    otp // Added for OTP verification
+    otp,
   } = req.body;
 
   let validations = [];
@@ -80,18 +88,39 @@ async function registerDelivery(req, res) {
     validations.push({ key: "phoneNumber", message: phoneNumMessage });
   }
 
-  if (!address) validations.push({ key: "address", message: "Address is required" });
-  if (!fullname) validations.push({ key: "fullname", message: "Full Name is required" });
-  if (!licenseNo) validations.push({ key: "licenseNo", message: "License No is required" });
+  if (!address)
+    validations.push({ key: "address", message: "Address is required" });
+  if (!fullname)
+    validations.push({ key: "fullname", message: "Full Name is required" });
+  if (!licenseNo)
+    validations.push({ key: "licenseNo", message: "License No is required" });
   if (!city) validations.push({ key: "city", message: "City is required" });
-  if (!experience) validations.push({ key: "experience", message: "Experience is required" });
-  if (!accountNumber) validations.push({ key: "accountNumber", message: "Account Number is required" });
-  if (!ifscCode) validations.push({ key: "ifscCode", message: "IFSC Code is required" });
-  if (!accountHolderName) validations.push({ key: "accountHolderName", message: "Account Holder Name is required" });
-  if (!bankName) validations.push({ key: "bankName", message: "Bank Name is required" });
+  if (!experience)
+    validations.push({ key: "experience", message: "Experience is required" });
+  if (!accountNumber)
+    validations.push({
+      key: "accountNumber",
+      message: "Account Number is required",
+    });
+  if (!ifscCode)
+    validations.push({ key: "ifscCode", message: "IFSC Code is required" });
+  if (!accountHolderName)
+    validations.push({
+      key: "accountHolderName",
+      message: "Account Holder Name is required",
+    });
+  if (!bankName)
+    validations.push({ key: "bankName", message: "Bank Name is required" });
 
-  if (!req.files || !req.files.licensePhoto || !req.files.licensePhoto[0].buffer) {
-    validations.push({ key: "licensePhoto", message: "License Photo is required" });
+  if (
+    !req.files ||
+    !req.files.licensePhoto ||
+    !req.files.licensePhoto[0].buffer
+  ) {
+    validations.push({
+      key: "licensePhoto",
+      message: "License Photo is required",
+    });
   }
   if (!req.files || !req.files.rcPhoto || !req.files.rcPhoto[0].buffer) {
     validations.push({ key: "rcPhoto", message: "RC Photo is required" });
@@ -101,8 +130,7 @@ async function registerDelivery(req, res) {
   }
 
   if (validations.length) {
-    res.status(400).json({ status: "error", validations: validations });
-    return;
+    return res.status(400).json({ status: "error", validations: validations });
   }
 
   try {
@@ -113,8 +141,9 @@ async function registerDelivery(req, res) {
 
     const existingUser = await collection.findOne({ phoneNumber });
     if (existingUser) {
-      res.status(400).json({ status: "error", message: "Phone Number already exists" });
-      return;
+      return res
+        .status(400)
+        .json({ status: "error", message: "Phone Number already exists" });
     }
 
     if (otp) {
@@ -131,56 +160,69 @@ async function registerDelivery(req, res) {
           );
           const newId = counter.seq;
 
-          const licenseFilePath = path.join("uploads/delivery/license", `${newId}`);
-          const rcFilePath = path.join("uploads/delivery/rc", `${newId}`);
-          const profileFilePath = path.join("uploads/delivery/profilePic", `${newId}`);
+          // Prepare S3 upload parameters for each image
+          const uploadToS3 = async (buffer, path) => {
+            const s3Params = {
+              Bucket: "uploads.immplus.in", // Your S3 bucket
+              Key: `delivery/${path}/${newId}.png`,
+              Body: buffer,
+              ContentType: "image/png", // Adjust content type if needed
+            };
+            const uploadResponse = await s3.upload(s3Params).promise();
+            return uploadResponse.Location;
+          };
 
-          if (!fs.existsSync("uploads/delivery/license")) {
-            fs.mkdirSync("uploads/delivery/license", { recursive: true });
-          }
+          const licensePhotoUrl = await uploadToS3(
+            req.files.licensePhoto[0].buffer,
+            "license"
+          );
+          const rcPhotoUrl = await uploadToS3(
+            req.files.rcPhoto[0].buffer,
+            "rc"
+          );
+          const profilePicUrl = await uploadToS3(
+            req.files.profilePic[0].buffer,
+            "profilePic"
+          );
 
-          if (!fs.existsSync("uploads/delivery/rc")) {
-            fs.mkdirSync("uploads/delivery/rc", { recursive: true });
-          }
-          if (!fs.existsSync("uploads/delivery/profilePic")) {
-            fs.mkdirSync("uploads/delivery/profilePic", { recursive: true });
-          }
-
-          fs.writeFileSync(licenseFilePath, req.files.licensePhoto[0].buffer);
-          fs.writeFileSync(rcFilePath, req.files.rcPhoto[0].buffer);
-          fs.writeFileSync(profileFilePath, req.files.profilePic[0].buffer);
-
+          // Insert the delivery partner's data into the database
           const result = await collection.insertOne({
             _id: newId,
             fullname,
             phoneNumber,
             address,
             licenseNo,
-            licensePhoto: licenseFilePath,
-            rcPhoto: rcFilePath,
+            licensePhoto: licensePhotoUrl, // S3 URL for license photo
+            rcPhoto: rcPhotoUrl, // S3 URL for RC photo
             experience,
             city,
-            profilePic: profileFilePath,
+            profilePic: profilePicUrl, // S3 URL for profile picture
             accountNumber,
             ifscCode,
             accountHolderName,
             bankName,
-            isApproved: 0
+            isApproved: 0,
           });
 
           if (result.acknowledged) {
-            res.status(200).json({
+            return res.status(200).json({
               status: "success",
               message: "Delivery partner registered successfully",
             });
           } else {
-            res.status(400).json({ status: "error", message: "Registration failed" });
+            return res
+              .status(400)
+              .json({ status: "error", message: "Registration failed" });
           }
         } else {
-          res.status(400).json({ status: "error", message: "Invalid OTP" });
+          return res
+            .status(400)
+            .json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
+        return res
+          .status(400)
+          .json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
       // Generate and send OTP
@@ -191,19 +233,22 @@ async function registerDelivery(req, res) {
       };
 
       await sendOTP(phoneNumber, otp);
-      res.json({ status: "success", message: "OTP sent to your phone number" });
+      return res.json({
+        status: "success",
+        message: "OTP sent to your phone number",
+      });
     }
   } catch (error) {
-    res.status(500).json({
+    console.error("Error during registration:", error);
+    return res.status(500).json({
       status: "error",
       message: "An error occurred during registration",
       reason: error.message,
     });
   } finally {
-    //await client.close();
+    // await client.close(); // Uncomment if using in a real connection
   }
 }
-
 
 async function loginDelivery(req, res) {
   const { phoneNumber, otp } = req.body;
@@ -233,7 +278,10 @@ async function loginDelivery(req, res) {
 
     const user = await collection.findOne({ phoneNumber: phoneNumber });
     if (user.isApproved != 1) {
-      res.status(400).json({ status: "error", validations: "Your Account is not Approved yet." });
+      res.status(400).json({
+        status: "error",
+        validations: "Your Account is not Approved yet.",
+      });
       return;
     }
     if (otp) {
@@ -320,7 +368,6 @@ async function loginDelivery(req, res) {
   }
 }
 
-
 async function updateDelivery(req, res) {
   const {
     id,
@@ -339,6 +386,7 @@ async function updateDelivery(req, res) {
   let validations = [];
   let regex = /^(?=.*[0-9])(?=.*[!@#$%^&*])(?=.*[A-Z])(?=.*[a-z])/;
 
+  // Validation checks
   if (!id)
     validations.push({ key: "id", message: "Delivery Partner ID is required" });
 
@@ -354,8 +402,7 @@ async function updateDelivery(req, res) {
   }
 
   if (validations.length) {
-    res.status(400).json({ status: "error", validations: validations });
-    return;
+    return res.status(400).json({ status: "error", validations });
   }
 
   try {
@@ -363,20 +410,23 @@ async function updateDelivery(req, res) {
     const db = client.db("ImmunePlus");
     const collection = db.collection("DeliveryPartner");
 
+    // Find the existing delivery partner by ID
     const user = await collection.findOne({ _id: parseInt(id) });
 
     if (!user) {
-      res
+      return res
         .status(400)
         .json({ status: "error", message: "Delivery Partner not found" });
-      return;
     }
 
     const updatedFields = {};
+
+    // Hash the password if provided
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
       updatedFields.password = hashedPassword;
     }
+    // Update other fields if they exist
     if (address) updatedFields.address = address;
     if (fullName) updatedFields.fullName = fullName;
     if (licenseNo) updatedFields.licenseNo = licenseNo;
@@ -388,50 +438,64 @@ async function updateDelivery(req, res) {
     if (accountHolderName) updatedFields.accountHolderName = accountHolderName;
     if (bankName) updatedFields.bankName = bankName;
 
+    // Handle file uploads to S3
     if (req.files) {
       if (req.files.licensePhoto && req.files.licensePhoto[0]) {
-        const licenseFilePath = path.join("uploads/delivery/license", `${id}`);
-        fs.writeFileSync(licenseFilePath, req.files.licensePhoto[0].buffer);
-        updatedFields.licensePhoto = licenseFilePath;
+        const licenseS3Params = {
+          Bucket: "uploads.immplus.in", // Your S3 bucket name
+          Key: `delivery/license/${id}.png`, // S3 key for license photo
+          Body: req.files.licensePhoto[0].buffer,
+          ContentType: req.files.licensePhoto[0].mimetype,
+        };
+        const licenseUpload = await s3.upload(licenseS3Params).promise();
+        updatedFields.licensePhoto = licenseUpload.Location; // Save S3 URL
       }
       if (req.files.rcPhoto && req.files.rcPhoto[0]) {
-        const rcFilePath = path.join("uploads/delivery/rc", `${id}`);
-        fs.writeFileSync(rcFilePath, req.files.rcPhoto[0].buffer);
-        updatedFields.rcPhoto = rcFilePath;
+        const rcS3Params = {
+          Bucket: "uploads.immplus.in",
+          Key: `delivery/rc/${id}.png`,
+          Body: req.files.rcPhoto[0].buffer,
+          ContentType: req.files.rcPhoto[0].mimetype,
+        };
+        const rcUpload = await s3.upload(rcS3Params).promise();
+        updatedFields.rcPhoto = rcUpload.Location;
       }
       if (req.files.profilePic && req.files.profilePic[0]) {
-        const profilePicFilePath = path.join(
-          "uploads/delivery/profilePic",
-          `${id}`
-        );
-        fs.writeFileSync(rcFilePath, req.files.profilePic[0].buffer);
-        updatedFields.profilePic = profilePicFilePath;
+        const profilePicS3Params = {
+          Bucket: "uploads.immplus.in",
+          Key: `delivery/profilePic/${id}.png`,
+          Body: req.files.profilePic[0].buffer,
+          ContentType: req.files.profilePic[0].mimetype,
+        };
+        const profilePicUpload = await s3.upload(profilePicS3Params).promise();
+        updatedFields.profilePic = profilePicUpload.Location;
       }
     }
 
+    // Update the delivery partner's record in the database
     const result = await collection.updateOne(
-      { _id: id },
+      { _id: parseInt(id) },
       { $set: updatedFields }
     );
-    console.log(result);
+
+    // Check if the update was successful
     if (result.modifiedCount > 0) {
-      res.status(200).json({
+      return res.status(200).json({
         status: "success",
         message: "Delivery Partner updated successfully",
       });
     } else {
-      res
+      return res
         .status(400)
         .json({ status: "error", message: "Failed to update user" });
     }
   } catch (error) {
-    res.status(500).json({
+    // Error handling
+    return res.status(500).json({
       status: "error",
       message: "An error occurred during update",
       reason: error.message,
     });
-  } finally {
-    //await client.close();
   }
 }
 
@@ -505,12 +569,16 @@ async function getAvailableOrders(req, res) {
     const ordersCollection = db.collection("acceptedOrders");
     const pharmacyCollection = db.collection("Pharmacy"); // Change the collection to "pharmacies"
 
-    const orders = await ordersCollection.find({ assignedPartner: null }).toArray();
+    const orders = await ordersCollection
+      .find({ assignedPartner: null })
+      .toArray();
 
     // Enrich orders with pharmacy address
     const enrichedOrders = await Promise.all(
       orders.map(async (order) => {
-        const pharmacy = await pharmacyCollection.findOne({ _id: order.assignedPharmacy });
+        const pharmacy = await pharmacyCollection.findOne({
+          _id: order.assignedPharmacy,
+        });
         return {
           ...order,
           pharmacyAddress: pharmacy?.address || "Address not found", // Add the address to the order
@@ -520,7 +588,9 @@ async function getAvailableOrders(req, res) {
 
     res.json(enrichedOrders);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch Orders", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch Orders", error: error.message });
   } finally {
     // await client.close(); // Ensure the client connection is closed after the operation
   }
@@ -757,12 +827,15 @@ async function getOrderHistoryById(req, res) {
     const ordersCollection = db.collection("Orders");
 
     // Find orders assigned to the delivery partner
-    const orders = await ordersCollection.find({ assignedPartner: parseInt(id) }).toArray();
+    const orders = await ordersCollection
+      .find({ assignedPartner: parseInt(id) })
+      .toArray();
 
     if (orders.length === 0) {
-      res
-        .status(404)
-        .json({ status: "error", message: "No orders found for this Delivery Partner" });
+      res.status(404).json({
+        status: "error",
+        message: "No orders found for this Delivery Partner",
+      });
     } else {
       res.json({ status: "success", orders });
     }

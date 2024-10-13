@@ -11,6 +11,14 @@ const client = new MongoClient(process.env.UU, {
     deprecationErrors: true,
   },
 });
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require("uuid");
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
 const fast2sms = require("fast-two-sms");
 
 const OTP_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutes
@@ -57,7 +65,6 @@ async function registerUser(req, res) {
     phoneNumber,
     location,
     licenseNo,
-    licenseImg,
     email,
     accountHolderName,
     accountNumber,
@@ -96,9 +103,11 @@ async function registerUser(req, res) {
     validations.push({ key: "licenseNo", message: "LicenseNo is required" });
   if (!location)
     validations.push({ key: "location", message: "location is required" });
-  //   if (!licenseImg)
-  //     validations.push({ key: "licenseNo", message: "LicenseNo is required" });
-
+  if (!req.file || !req.file.buffer)
+    validations.push({
+      key: "licenseImg",
+      message: "License image is required",
+    });
   if (!accountNumber)
     validations.push({
       key: "accountNumber",
@@ -147,13 +156,27 @@ async function registerUser(req, res) {
           );
           const newId = counter.seq;
 
+          // Prepare S3 upload parameters for license image
+          const fileExtension = path.extname(req.file.originalname); // Get file extension
+          const fileName = `pharmacy_${newId}_${uuidv4()}${fileExtension}`; // Unique file name
+          const s3Params = {
+            Bucket: "uploads.immplus.in", // Your S3 bucket name
+            Key: `pharmacy/${fileName}`, // File path in the bucket
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype, // Ensure the file's MIME type is set correctly
+          };
+
+          // Upload to S3
+          const s3Response = await s3.upload(s3Params).promise();
+          const licenseImgUrl = s3Response.Location; // S3 URL for the uploaded image
+
           const result = await collection.insertOne({
             name,
             address,
             phoneNumber,
             location,
             licenseNo,
-            licenseImg,
+            licenseImg: licenseImgUrl, // Save the S3 image URL in the database
             email,
             accountHolderName,
             accountNumber,
@@ -323,12 +346,15 @@ async function updateUser(req, res) {
     ifscCode,
     bankName,
   } = req.body;
+
   let validations = [];
   let regex = /^(?=.*[0-9])(?=.*[!@#$%^&*])(?=.*[A-Z])(?=.*[a-z])/;
   let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  // ID validation
   if (!id) validations.push({ key: "id", message: "Pharmacy ID is required" });
 
+  // Password validation
   if (
     password &&
     (password.length < 8 || password.length > 20 || !regex.test(password))
@@ -340,6 +366,7 @@ async function updateUser(req, res) {
     });
   }
 
+  // Email validation
   if (email && !emailRegex.test(email))
     validations.push({ key: "email", message: "Email is not valid" });
 
@@ -353,6 +380,7 @@ async function updateUser(req, res) {
     const db = client.db("ImmunePlus");
     const collection = db.collection("Pharmacy");
 
+    // Find the user by ID
     const user = await collection.findOne({ _id: parseInt(id) });
 
     if (!user) {
@@ -360,6 +388,7 @@ async function updateUser(req, res) {
       return;
     }
 
+    // Fields to update
     const updatedFields = {};
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -374,20 +403,31 @@ async function updateUser(req, res) {
     if (ifscCode) updatedFields.ifscCode = ifscCode;
     if (accountHolderName) updatedFields.accountHolderName = accountHolderName;
     if (bankName) updatedFields.bankName = bankName;
+
+    // License Image upload handling to S3
     if (req.file && req.file.buffer) {
-      const filePath = path.join("uploads/pharmacy", `${id}`);
-      if (!fs.existsSync("uploads/pharmacy")) {
-        fs.mkdirSync("uploads/pharmacy", { recursive: true });
-      }
-      fs.writeFileSync(filePath, req.file.buffer);
-      updatedFields.licenseImg = filePath;
+      const fileExtension = path.extname(req.file.originalname); // Get file extension
+      const fileName = `pharmacy_${id}_${uuidv4()}${fileExtension}`; // Generate unique file name
+      const s3Params = {
+        Bucket: "uploads.immplus.in", // Your S3 bucket name
+        Key: `pharmacy/${fileName}`, // Folder for pharmacy license images in S3
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype, // Ensure MIME type is set correctly
+      };
+
+      // Upload to S3
+      const s3Response = await s3.upload(s3Params).promise();
+      const imageUrl = s3Response.Location; // S3 URL for the uploaded image
+      updatedFields.licenseImg = imageUrl; // Save image URL to the licenseImg field
     }
 
+    // Perform the update
     const result = await collection.updateOne(
       { _id: parseInt(id) },
       { $set: updatedFields }
     );
 
+    // Check if any fields were modified
     if (result.modifiedCount > 0) {
       res
         .status(200)
@@ -401,10 +441,10 @@ async function updateUser(req, res) {
     res.status(500).json({
       status: "error",
       message: "An error occurred during update",
-      reason: error,
+      reason: error.message || error,
     });
   } finally {
-    // await client.close();
+    //await client.close();
   }
 }
 

@@ -3,6 +3,14 @@ const fs = require("fs");
 const path = require("path");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
+const AWS = require("aws-sdk"); // Make sure AWS SDK is imported
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
+
 const wss = require("./webSocket");
 const client = new MongoClient(process.env.UU, {
   serverApi: {
@@ -22,23 +30,6 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 async function placeOrder(req, res) {
-  //   {
-  //     "userId":41122,
-  //     "products": [1],
-  //     "quantity":10,
-  //     "location":"H-141",
-  //     "totalPrice":"208.32",
-  //     "prescription": false,
-  //     "coupon":3,
-  //     "priceBreak":{ "totalProductPrice": 600,
-  //     "discount": 100,
-  //     "deliveryFee": 20,
-  //     "gst": 90,
-  //     "finalPrice": 610
-
-  //     }
-
-  // }
   const {
     userId,
     products,
@@ -50,13 +41,13 @@ async function placeOrder(req, res) {
     priceBreak,
   } = req.body;
 
-  // Parse products and quantity
   let parsedProducts = [];
   let parsedQuantity = [];
 
+  // Parse products and quantity
   try {
     parsedProducts = JSON.parse(products);
-    parsedQuantity = JSON.parse(quantity); // Parse the quantity field
+    parsedQuantity = JSON.parse(quantity);
   } catch (error) {
     return res.status(400).json({
       status: "error",
@@ -64,6 +55,7 @@ async function placeOrder(req, res) {
     });
   }
 
+  // Validation
   if (!userId || !location) {
     return res.status(400).json({
       status: "error",
@@ -93,8 +85,6 @@ async function placeOrder(req, res) {
     const paymentCollection = db.collection("paymentOrder");
     const availableOrderCollection = db.collection("ongoingOrders");
 
-    let validations = [];
-
     if (prescription === "true" || prescription === undefined) {
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
@@ -104,12 +94,9 @@ async function placeOrder(req, res) {
       }
     }
 
-    if (validations.length > 0) {
-      return res.status(400).json({ status: "error", validations });
-    }
-
     const session = client.startSession();
     let newOrderId, newPayementId;
+
     await session.withTransaction(async () => {
       const counter = await countersCollection.findOneAndUpdate(
         { _id: "orderId" },
@@ -120,22 +107,18 @@ async function placeOrder(req, res) {
 
       let prescriptionImagePaths = [];
       if (prescription) {
-        const directoryPath = path.join(
-          "uploads/order/prescription",
-          `${newOrderId}`
-        );
-        if (!fs.existsSync(directoryPath)) {
-          fs.mkdirSync(directoryPath, { recursive: true });
-        }
+        // Upload prescription images to AWS S3
+        for (const [index, file] of req.files.entries()) {
+          const s3Params = {
+            Bucket: "uploads.immplus.in", // S3 bucket name
+            Key: `order/prescription/${newOrderId}-${index + 1}.jpg`, // File path in S3
+            Body: file.buffer,
+            ContentType: file.mimetype,
+          };
 
-        req.files.forEach((file, index) => {
-          const filePath = path.join(
-            directoryPath,
-            `${newOrderId}-${index + 1}.jpg`
-          );
-          fs.writeFileSync(filePath, file.buffer);
-          prescriptionImagePaths.push(filePath);
-        });
+          const uploadResponse = await s3.upload(s3Params).promise();
+          prescriptionImagePaths.push(uploadResponse.Location); // Save S3 URL
+        }
       }
 
       const counter2 = await countersCollection.findOneAndUpdate(
@@ -150,18 +133,19 @@ async function placeOrder(req, res) {
         timeZone: "Asia/Kolkata",
       });
       const otp = Math.floor(1000 + Math.random() * 9000);
+
       const order = {
         _id: newOrderId,
         userId: parseInt(userId),
-        products: parsedProducts, // Use parsedProducts
-        quantity: parsedQuantity, // Add parsedQuantity to the order
+        products: parsedProducts,
+        quantity: parsedQuantity,
         location,
         status: 0,
         date: dateInIST,
         assignedPharmacy: null,
         totalPrice: parseInt(totalPrice),
         assignedPartner: null,
-        prescriptionImg: prescriptionImagePaths,
+        prescriptionImg: prescriptionImagePaths, // Use S3 URLs
         otp: otp,
         coupon: coupon,
         priceBreak: priceBreak,
@@ -190,6 +174,7 @@ async function placeOrder(req, res) {
 
     global.io.emit("newOrder", { orderId: newOrderId });
     sendPharmaNotification(0, newOrderId, 1);
+
     return res.status(200).json({
       status: "success",
       message: "Order placed successfully",

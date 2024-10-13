@@ -8,6 +8,14 @@ const DoctorAvailability = require("../models/Availability");
 const Appointment = require("../models/Appointments");
 const { sendDoctorNotification } = require("./Notification/docterNotification");
 const { sendUserNotification } = require("./Notification/userNotification");
+const AWS = require("aws-sdk");
+const { v4: uuidv4 } = require("uuid");
+
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
 
 let client = new MongoClient(process.env.UU, {
   serverApi: {
@@ -299,6 +307,7 @@ async function registerDoctor(req, res) {
   let phoneNumMessage = "";
   let emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+  // Phone number validation
   if (phoneNumber) {
     if (phoneNumber.length !== 10) {
       phoneNumMessage = "Phone Number should have 10 digits.";
@@ -311,6 +320,7 @@ async function registerDoctor(req, res) {
     validations.push({ key: "phoneNumber", message: phoneNumMessage });
   }
 
+  // Email and other field validations
   if (!email) validations.push({ key: "email", message: "Email is required" });
   else if (!emailRegex.test(email)) {
     validations.push({ key: "email", message: "Email is not valid" });
@@ -355,14 +365,13 @@ async function registerDoctor(req, res) {
     });
   if (!bankName)
     validations.push({ key: "bankName", message: "Bank Name is required" });
-  //if (!otp) validations.push({ key: "otp", message: "OTP is required" });
 
+  // Check if image is provided
   if (!req.file || !req.file.buffer)
     validations.push({ key: "img", message: "Image is required" });
 
   if (validations.length) {
-    res.status(400).json({ status: "error", validations: validations });
-    return;
+    return res.status(400).json({ status: "error", validations: validations });
   }
 
   try {
@@ -374,10 +383,9 @@ async function registerDoctor(req, res) {
     const existingUser = await collection.findOne({ phoneNumber });
 
     if (existingUser) {
-      res
+      return res
         .status(400)
         .json({ status: "error", message: "Phone Number already exists" });
-      return;
     }
 
     if (otp) {
@@ -393,13 +401,20 @@ async function registerDoctor(req, res) {
             { upsert: true, returnDocument: "after" }
           );
           const newId = counter.seq;
-          const filePath = path.join("uploads/doctor", `${newId}`);
 
-          if (!fs.existsSync("uploads/doctor")) {
-            fs.mkdirSync("uploads/doctor", { recursive: true });
-          }
+          // Prepare S3 upload parameters
+          const fileExtension = path.extname(req.file.originalname); // Get the file extension
+          const fileName = `doctor_${newId}${fileExtension}`; // Unique file name
+          const s3Params = {
+            Bucket: "uploads.immplus.in", // Your S3 bucket name
+            Key: `doctor/${fileName}`, // File path in the bucket
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype, // Ensure the file's MIME type is set correctly
+          };
 
-          fs.writeFileSync(filePath, req.file.buffer);
+          // Upload to S3
+          const s3Response = await s3.upload(s3Params).promise();
+          const imageUrl = s3Response.Location; // S3 URL for the uploaded image
 
           // Save doctor details in the database
           const result = await collection.insertOne({
@@ -423,24 +438,27 @@ async function registerDoctor(req, res) {
             bankName,
             isApproved: 0,
             phoneNumber,
+            img: imageUrl, // Save the S3 URL in the database
           });
 
           if (result.acknowledged) {
-            res.status(200).json({
+            return res.status(200).json({
               status: "success",
               message: "Doctor registered successfully",
               id: newId,
             });
           } else {
-            res
+            return res
               .status(400)
               .json({ status: "error", message: "Registration failed" });
           }
         } else {
-          res.status(400).json({ status: "error", message: "Invalid OTP" });
+          return res
+            .status(400)
+            .json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res
+        return res
           .status(400)
           .json({ status: "error", message: "OTP expired or invalid" });
       }
@@ -453,16 +471,17 @@ async function registerDoctor(req, res) {
       };
 
       await sendOTP(phoneNumber, otp);
-      res.json({ status: "success", message: "OTP sent to your phone number" });
+      return res.json({
+        status: "success",
+        message: "OTP sent to your phone number",
+      });
     }
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       status: "error",
       message: "An error occurred during registration",
       reason: error.message,
     });
-  } finally {
-    //await client.close();
   }
 }
 
@@ -816,10 +835,10 @@ async function updateDoctor(req, res) {
       name,
       hospital,
       about,
-      type,
+
       patients,
       experience,
-      rating,
+
       workinghours,
       totalslots,
       availableSlots,
@@ -894,15 +913,22 @@ async function updateDoctor(req, res) {
       if (accountHolderName)
         updatedFields.accountHolderName = accountHolderName;
       if (bankName) updatedFields.bankName = bankName;
+      // Prepare S3 upload parameters
       if (req.file && req.file.buffer) {
-        const filePath = path.join("uploads/doctor", `${id}`);
-        if (!fs.existsSync("uploads/doctor")) {
-          fs.mkdirSync("uploads/category", { recursive: true });
-        }
-        fs.writeFileSync(filePath, req.file.buffer);
-        updatedFields.img = filePath;
-      }
+        const fileExtension = path.extname(req.file.originalname); // Get the file extension
+        const fileName = `doctor_${newId}${fileExtension}`; // Unique file name
+        const s3Params = {
+          Bucket: "uploads.immplus.in", // Your S3 bucket name
+          Key: `doctor/${fileName}`, // File path in the bucket
+          Body: req.file.buffer,
+          ContentType: req.file.mimetype, // Ensure the file's MIME type is set correctly
+        };
 
+        // Upload to S3
+        const s3Response = await s3.upload(s3Params).promise();
+        const imageUrl = s3Response.Location; // S3 URL for the uploaded image
+        updatedFields.bankName = imageUrl;
+      }
       const result = await collection.updateOne(
         { _id: parseInt(id) },
         { $set: updatedFields }
