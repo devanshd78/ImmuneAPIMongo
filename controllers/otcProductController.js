@@ -73,6 +73,8 @@ async function create(req, res) {
         manufacturers,
         salt_synonmys, // Ensure this variable is properly defined in req.body
         introduction,
+        category,
+      sub_category,
         benefits,
         description,
         how_to_use,
