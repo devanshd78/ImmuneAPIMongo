@@ -226,13 +226,175 @@ async function getProductById(req, res) {
     }
 }
 
+async function searchProducts(req, res) {
+    try {
+      await client.connect();
+      const db = client.db("ImmunePlus");
+  
+      const { keyword } = req.body;
+  
+      if (!keyword) {
+        return res.status(400).json({
+          status: "error",
+          message: "Keyword is required for search",
+        });
+      }
+  
+      // Build the search query
+      const searchQuery = {
+        $or: [
+          { name: { $regex: keyword, $options: "i" } },
+          { category: { $regex: keyword, $options: "i" } },
+          { sub_category: { $regex: keyword, $options: "i" } },
+        ],
+      };
+  
+      // Search in Products collection
+      const productsCollection = db.collection("Products");
+      const products = await productsCollection
+        .find(searchQuery)
+        .limit(10)
+        .toArray();
+  
+      // Add a type field to indicate it's from Products
+      const productsWithType = products.map((product) => ({
+        ...product,
+        type: 1, // Type 1 for Products
+      }));
+  
+      // Search in OTC collection
+      const otcCollection = db.collection("OTC");
+      const otcProducts = await otcCollection
+        .find(searchQuery)
+        .limit(10)
+        .toArray();
+  
+      // Add a type field to indicate it's from OTC
+      const otcProductsWithType = otcProducts.map((product) => ({
+        ...product,
+        type: 2, // Type 2 for OTC
+      }));
+  
+      // Combine both results
+      const combinedResults = [...productsWithType, ...otcProductsWithType];
+  
+      if (combinedResults.length > 0) {
+        res.status(200).json({
+          status: "success",
+          data: combinedResults,
+        });
+      } else {
+        res.status(404).json({
+          status: "error",
+          message: "No products found matching the keyword",
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: "An error occurred during the search",
+        reason: error.message,
+      });
+    } finally {
+      //await client.close();
+    }
+  }
+  
+  async function searchFilterProducts(req, res) {
+    try {
+      await client.connect();
+      const db = client.db("ImmunePlus");
+      const productsCollection = db.collection("Products");
+      const otcCollection = db.collection("Otc");
+  
+      // Extract the keyword, page, and limit from the request body
+      const { keyword, page = 1, limit = 5 } = req.body;
+  
+      if (!keyword) {
+        return res.status(400).json({
+          status: "error",
+          message: "Keyword is required for search",
+        });
+      }
+  
+      // Build the search query for MRP, name, and use_of fields
+      const searchQuery = {
+        $or: [
+          { name: { $regex: keyword, $options: "i" } }, // Search in the 'name' field
+          { MRP: { $regex: keyword, $options: "i" } }, // Search in the 'MRP' field
+          { Category: { $regex: keyword, $options: "i" } },
+          { SubCategory: { $regex: keyword, $options: "i" } },
+          //{ use_of: { $regex: keyword, $options: "i" } }, // Search in the 'use_of' field
+        ],
+      };
+  
+      // Convert page and limit to integers
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+  
+      // Search in both Products and Otc collections
+      const products = await productsCollection.find(searchQuery).toArray();
+      const otcs = await otcCollection.find(searchQuery).toArray();
+  
+      // Add type field (1 for Products, 2 for Otc)
+      const productsWithType = products.map((product) => ({
+        ...product,
+        type: 1, // Products type
+      }));
+  
+      const otcsWithType = otcs.map((otc) => ({
+        ...otc,
+        type: 2, // Otc type
+      }));
+  
+      // Combine both Products and Otc results
+      const combinedResults = [...productsWithType, ...otcsWithType];
+  
+      // Total count before pagination
+      const totalCount = combinedResults.length;
+  
+      // Apply pagination to combined results
+      const paginatedResults = combinedResults.slice(
+        (pageNum - 1) * limitNum,
+        pageNum * limitNum
+      );
+  
+      if (paginatedResults.length > 0) {
+        res.status(200).json({
+          status: "success",
+          data: paginatedResults,
+          pagination: {
+            currentPage: pageNum,
+            totalPages: Math.ceil(totalCount / limitNum),
+            totalItems: totalCount,
+          },
+        });
+      } else {
+        res.status(404).json({
+          status: "error",
+          message: "No Products or Otc items found matching the criteria",
+        });
+      }
+    } catch (error) {
+      res.status(500).json({
+        status: "error",
+        message: "An error occurred during the search",
+        reason: error.message,
+      });
+    } finally {
+      // await client.close();
+    }
+  }
+
 module.exports = {
     create,
     getAllProducts,
     upload,
     update,
     remove,
-    getProductById
+    getProductById,
+    searchProducts,
+    searchFilterProducts,
 };
 
 // async function create(req, res) {

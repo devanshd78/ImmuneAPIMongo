@@ -195,6 +195,29 @@ async function remove(req, res) {
       .json({ message: "Failed to delete SubCategory", error: error });
   }
 }
+async function getSubCategoryByCategory(req, res) {
+  const { category } = req.query;
+
+  if (!category) {
+    res.status(400).json({ status: "error", message: "category is required" });
+    return;
+  }
+  try {
+    await client.connect();
+    const db = client.db("ImmunePlus");
+    const collection = db.collection("SubCategory");
+    const product = await collection.find({ mainCategory: category }).toArray();
+    if (product.length === 0) {
+      res.status(404).json({ status: "error", message: "Product not found" });
+    } else {
+      res.json(product);
+    }
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to fetch Product", error: error.message });
+  }
+}
 
 module.exports = {
   create,
@@ -202,4 +225,5 @@ module.exports = {
   upload,
   update,
   remove,
+  getSubCategoryByCategory,
 };
