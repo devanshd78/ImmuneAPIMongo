@@ -5,6 +5,7 @@ const {
   upload,
   update,
   remove,
+  getSubCategoryByCategory
 } = require("../controllers/subCategoryController");
 
 const router = express.Router();
