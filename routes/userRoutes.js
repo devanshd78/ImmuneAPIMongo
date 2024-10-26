@@ -8,6 +8,7 @@ const {
   getUserbyId,
   getUserAppointment,
   dummyLoginUser,
+  addEditAddressById
 } = require("../controllers/usersController");
 
 const router = express.Router();
