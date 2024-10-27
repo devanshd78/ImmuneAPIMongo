@@ -275,8 +275,8 @@ async function registerUser(req, res) {
 }
 
 async function addEditAddressById(req, res) {
-  const { userId } = req.params; // Get userId from request params
-  const { newAddress, index } = req.body; // `newAddress` is the address to add/edit, `index` is optional
+  // Get userId from request params
+  const { newAddress, index, userId } = req.body; // `newAddress` is the address to add/edit, `index` is optional
 
   if (!userId) {
     res.status(400).json({ status: "error", message: "User ID is required" });
