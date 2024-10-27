@@ -278,6 +278,7 @@ async function addEditAddressById(req, res) {
   // Get userId from request params
   const { newAddress, index, userId } = req.body; // `newAddress` is the address to add/edit, `index` is optional
 
+  console.log(req.body);
   if (!userId) {
     res.status(400).json({ status: "error", message: "User ID is required" });
     return;
@@ -582,71 +583,6 @@ async function dummyLoginUser(req, res) {
       message: "Internal Server Error",
       error: error.message,
     });
-  }
-}
-
-async function addEditAddressById(req, res) {
-  const { userId } = req.params; // Get userId from request params
-  const { newAddress, index } = req.body; // `newAddress` is the address to add/edit, `index` is optional
-
-  if (!userId) {
-    res.status(400).json({ status: "error", message: "User ID is required" });
-    return;
-  }
-
-  if (!newAddress) {
-    res.status(400).json({ status: "error", message: "Address is required" });
-    return;
-  }
-
-  try {
-    await client.connect();
-    const db = client.db("ImmunePlus");
-    const collection = db.collection("Users");
-
-    // Find the user by userId
-    const user = await collection.findOne({ _id: parseInt(userId) });
-
-    if (!user) {
-      res.status(404).json({ status: "error", message: "User not found" });
-      return;
-    }
-
-    let updatedAddresses = [...user.addresses]; // Copy existing addresses
-
-    // If an index is provided, update that specific address
-    if (index !== undefined && index >= 0 && index < updatedAddresses.length) {
-      updatedAddresses[index] = newAddress; // Edit the address at the specified index
-    } else {
-      // Otherwise, add the new address to the array
-      updatedAddresses.push(newAddress);
-    }
-
-    // Update the user's addresses in the database
-    const result = await collection.updateOne(
-      { _id: parseInt(userId) },
-      { $set: { addresses: updatedAddresses } }
-    );
-
-    if (result.modifiedCount === 1) {
-      res.status(200).json({
-        status: "success",
-        message: "Address updated successfully",
-        updatedAddresses,
-      });
-    } else {
-      res
-        .status(400)
-        .json({ status: "error", message: "Failed to update address" });
-    }
-  } catch (error) {
-    res.status(500).json({
-      status: "error",
-      message: "An error occurred while updating the address",
-      reason: error.message,
-    });
-  } finally {
-    //await client.close();
   }
 }
 
