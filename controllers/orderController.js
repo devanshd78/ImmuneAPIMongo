@@ -370,7 +370,7 @@ async function changeOrderStatus(req, res) {
       validations.push({ key: "orderId", message: "Order Id is required" });
     }
 
-    if (!status) {
+    if (!status && status != 0) {
       validations.push({ key: "status", message: "Status is required" });
     }
 

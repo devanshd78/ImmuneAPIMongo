@@ -278,7 +278,6 @@ async function addEditAddressById(req, res) {
   // Get userId from request params
   const { newAddress, index, userId } = req.body; // `newAddress` is the address to add/edit, `index` is optional
 
-  console.log(req.body);
   if (!userId) {
     res.status(400).json({ status: "error", message: "User ID is required" });
     return;
