@@ -337,8 +337,8 @@ async function registerDoctor(req, res) {
     validations.push({ key: "experience", message: "Experience is required" });
   if (!specialist)
     validations.push({ key: "specialist", message: "Specialist is required" });
-  if (!videoFee)
-    validations.push({ key: "videoFee", message: "Video Fee is required" });
+  // if (!videoFee)
+  //   validations.push({ key: "videoFee", message: "Video Fee is required" });
   if (!appointmentFee)
     validations.push({
       key: "appointmentFee",
@@ -351,24 +351,24 @@ async function registerDoctor(req, res) {
       key: "workinghours",
       message: "Working Hours is required",
     });
-  if (!accountNumber)
-    validations.push({
-      key: "accountNumber",
-      message: "Account Number is required",
-    });
-  if (!ifscCode)
-    validations.push({ key: "ifscCode", message: "IFSC Code is required" });
-  if (!accountHolderName)
-    validations.push({
-      key: "accountHolderName",
-      message: "Account Holder Name is required",
-    });
-  if (!bankName)
-    validations.push({ key: "bankName", message: "Bank Name is required" });
+  // if (!accountNumber)
+  //   validations.push({
+  //     key: "accountNumber",
+  //     message: "Account Number is required",
+  //   });
+  // if (!ifscCode)
+  //   validations.push({ key: "ifscCode", message: "IFSC Code is required" });
+  // if (!accountHolderName)
+  //   validations.push({
+  //     key: "accountHolderName",
+  //     message: "Account Holder Name is required",
+  //   });
+  // if (!bankName)
+  //   validations.push({ key: "bankName", message: "Bank Name is required" });
 
   // Check if image is provided
-  if (!req.file || !req.file.buffer)
-    validations.push({ key: "img", message: "Image is required" });
+  // if (!req.file || !req.file.buffer)
+  //   validations.push({ key: "img", message: "Image is required" });
 
   if (validations.length) {
     return res.status(400).json({ status: "error", validations: validations });
