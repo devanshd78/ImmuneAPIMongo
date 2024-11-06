@@ -113,7 +113,7 @@ async function bookAppointment(req, res) {
     const docterCollection = db.collection("Doctors");
 
     // Validate input
-    if ((!scheduleId || !patientId || !type, appointmentFor)) {
+    if (!scheduleId || !patientId || !type || !appointmentFor) {
       res.status(400).json({
         status: "error",
         message:
