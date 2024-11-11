@@ -226,12 +226,20 @@ async function receivePharmacyResponse(req, res) {
     );
 
     if (canFulfillEntireOrder) {
-      await assignOrderToPharmacy(orderId, pharmacyId);
+      const result = await assignOrderToPharmacy(orderId, pharmacyId);
+      if(result == true){
       return res.status(200).json({
         status: "success",
         message: "Order assigned immediately",
         orderId,
       });
+    }else{
+      return res.status(200).json({
+        status: "error",
+        message: "Order Cancelled by user",
+        orderId,
+      });
+    }
     }
 
     res.status(200).json({ status: "success", message: "Response recorded" });
@@ -270,7 +278,7 @@ async function evaluateResponses(orderId) {
     if (bestPharmacy) {
       await assignOrderToPharmacy(orderId, bestPharmacy);
     } else {
-      console.log(`No suitable pharmacy found for order ${orderId}`);
+      //console.log(`No suitable pharmacy found for order ${orderId}`);
       global.io.emit("noSuitablePharmacy", { orderId });
     }
 
@@ -286,6 +294,8 @@ async function assignOrderToPharmacy(orderId, pharmacyId) {
     const ordersCollection = db.collection("Orders");
     const paymentCollection = db.collection("paymentOrder");
     const acceptedOrders = db.collection("acceptedOrders");
+
+    if(ordersCollection.status != 15){
 
     await ordersCollection.updateOne(
       { _id: orderId },
@@ -316,6 +326,11 @@ async function assignOrderToPharmacy(orderId, pharmacyId) {
     });
 
     global.io.emit("GetDeliveryPartner", { orderId });
+
+    return true
+  }else{
+    return false
+  }
   } catch (error) {
     console.error("Error assigning order to pharmacy:", error);
   }

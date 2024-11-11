@@ -13,6 +13,8 @@ const client = new MongoClient(process.env.UU, {
 
 // Multer configuration for memory storage
 // type
+// 0 = No Pharmacy
+// 15 = Order Canceled
 // 1= order Received;
 // 2= order Confirmed
 // 3= rider rider on its way to medical store;

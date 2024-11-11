@@ -89,7 +89,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 const mongoose = require("mongoose");
-
+//appointmentFor 1- self 2-Others
 async function bookAppointment(req, res) {
   try {
     await connectToDatabase();
@@ -113,7 +113,7 @@ async function bookAppointment(req, res) {
     const docterCollection = db.collection("Doctors");
 
     // Validate input
-    if (!scheduleId || !patientId || !type || !appointmentFor) {
+    if (!scheduleId || !patientId || !type ) {
       res.status(400).json({
         status: "error",
         message:
@@ -169,7 +169,7 @@ async function bookAppointment(req, res) {
       { upsert: true, returnDocument: "after" }
     );
     const newId = counter.seq;
-    console.log(newId);
+  
     const counter2 = await countersCollection.findOneAndUpdate(
       { _id: "paymentId" },
       { $inc: { seq: 1 } },
@@ -225,6 +225,8 @@ async function bookAppointment(req, res) {
         bookingId: newId,
       });
       sendDoctorNotification(schedule.doctorId, newId, 10);
+      global.io.emit("newAppointment", { doctorId: schedule.doctorId,  date: schedule.date,
+        time: schedule.time, id: newId });
       sendUserNotification(patientId, newId, 10);
     } else {
       res

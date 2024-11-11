@@ -46,8 +46,8 @@ async function loginUser(req, res) {
 
   if (!phoneNumber) {
     phoneNumMessage = "Phone Number is required.";
-  } else if (phoneNumber.length < 10 || phoneNumber.length > 10) {
-    phoneNumMessage = "Phone Number should habe 10 digits.";
+  } else if (phoneNumber.length !== 10) {
+    phoneNumMessage = "Phone Number should have 10 digits.";
   }
 
   if (phoneNumMessage) {
@@ -69,10 +69,13 @@ async function loginUser(req, res) {
           await client.connect();
           const db = client.db("ImmunePlus");
           const collection = db.collection("Users");
+          const countersCollection = db.collection("Counters");
 
-          const user = await collection.findOne({ phoneNumber: phoneNumber });
+          let user = await collection.findOne({ phoneNumber: phoneNumber });
+          let userInfo;
+
           if (user) {
-            const userInfo = {
+            userInfo = {
               fullName: user.fullName,
               id: user._id,
               gender: user.gender,
@@ -84,26 +87,42 @@ async function loginUser(req, res) {
               phoneNumber: user.phoneNumber,
               previousHistory: user.previousHistory,
             };
-
-            res.json({
-              status: "success",
-              message: "Login successful!",
-              user: userInfo,
-            });
           } else {
-            res
-              .status(400)
-              .json({ status: "error", message: "Invalid Phone Number" });
+            // Register the user if not found
+            const counter = await countersCollection.findOneAndUpdate(
+              { _id: "userId" },
+              { $inc: { seq: 1 } },
+              { upsert: true, returnDocument: "after" }
+            );
+            const newId = counter.seq;
+
+            const result = await collection.insertOne({
+              phoneNumber,
+              _id: newId,
+              // Initialize other fields with default values if needed
+            });
+
+            if (result.acknowledged) {
+              userInfo = {
+                id: newId,
+                phoneNumber,
+                // Initialize other fields if needed
+              };
+            } else {
+              throw new Error("Failed to register new user.");
+            }
           }
 
-          client.close();
+          res.json({
+            status: "success",
+            message: "Login successful!",
+            user: userInfo,
+          });
         } else {
           res.status(400).json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res
-          .status(400)
-          .json({ status: "error", message: "OTP expired or invalid" });
+        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
       // Generate and send OTP
@@ -171,28 +190,12 @@ async function registerUser(req, res) {
     validations.push({ key: "phoneNumber", message: phoneNumMessage });
   }
 
-  if (!addresses || addresses.length === 0)
-    validations.push({
-      key: "addresses",
-      message: "At least one address is required",
-    });
-  if (!fullName)
-    validations.push({ key: "fullName", message: "Full name is required" });
-  if (email && !emailRegex.test(email))
-    validations.push({ key: "email", message: "Email is not valid" });
-  if (!gender)
-    validations.push({ key: "gender", message: "Gender is required" });
-  if (!state) validations.push({ key: "state", message: "State is required" });
-  if (!pincode)
-    validations.push({ key: "pincode", message: "Pincode is required" });
-  if (!phoneNumber)
-    validations.push({
-      key: "phoneNumber",
-      message: "Phone number is required",
-    });
-  if (!ageGroup)
-    validations.push({ key: "ageGroup", message: "Age Group is required" });
-
+  // if (!addresses || addresses.length === 0)
+  //   validations.push({
+  //     key: "addresses",
+  //     message: "At least one address is required",
+  //   });
+  
   if (validations.length) {
     res.status(400).json({ status: "error", validations: validations });
     return;
@@ -205,12 +208,6 @@ async function registerUser(req, res) {
     const countersCollection = db.collection("Counters");
 
     const existingUser = await collection.findOne({ phoneNumber });
-    if (existingUser) {
-      res
-        .status(400)
-        .json({ status: "error", validations: "Phone Number already exists." });
-      return;
-    }
 
     if (otp) {
       const storedOtp = otpStorage[phoneNumber];
