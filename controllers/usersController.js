@@ -336,6 +336,72 @@ async function addEditAddressById(req, res) {
   }
 }
 
+async function deleteAddressByIndex(req, res) {
+  const { index, userId } = req.body;
+
+  if (userId === undefined) {
+    res.status(400).json({ status: "error", message: "User ID is required" });
+    return;
+  }
+
+  if (index === undefined || index < 0) {
+    res.status(400).json({ status: "error", message: "Valid address index is required" });
+    return;
+  }
+
+  try {
+    await client.connect();
+    const db = client.db("ImmunePlus");
+    const collection = db.collection("Users");
+
+    // Find the user by userId
+    const user = await collection.findOne({ _id: parseInt(userId) });
+
+    if (!user) {
+      res.status(404).json({ status: "error", message: "User not found" });
+      return;
+    }
+
+    let updatedAddresses = [...user.addresses]; // Copy existing addresses
+
+    // Check if index is within bounds
+    if (index >= 0 && index < updatedAddresses.length) {
+      // Remove the address at the specified index
+      updatedAddresses.splice(index, 1);
+
+      // Update the user's addresses in the database
+      const result = await collection.updateOne(
+        { _id: parseInt(userId) },
+        { $set: { addresses: updatedAddresses } }
+      );
+
+      if (result.modifiedCount === 1) {
+        res.status(200).json({
+          status: "success",
+          message: "Address deleted successfully",
+          updatedAddresses,
+        });
+      } else {
+        res.status(400).json({ status: "error", message: "Failed to delete address" });
+      }
+    } else {
+      res.status(400).json({
+        status: "error",
+        message: "Address index out of bounds",
+      });
+    }
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: "An error occurred while deleting the address",
+      reason: error.message,
+    });
+  } finally {
+    //await client.close();
+  }
+}
+
+
 async function updateUser(req, res) {
   const {
     id,
@@ -499,7 +565,7 @@ async function getUserbyId(req, res) {
   }
 }
 
-async function getUserAppointment(req, res) {
+async function getUserOrders(req, res) {
   const { id } = req.query;
 
   if (!id) {
@@ -508,7 +574,7 @@ async function getUserAppointment(req, res) {
   }
   try {
     const db = client.db("ImmunePlus");
-    const collection = db.collection("appointments");
+    const collection = db.collection("Orders");
     const user = await collection.find({ patientId: parseInt(id) }).toArray();
     if (user.length === 0) {
       res.status(404).json({ status: "error", message: "User not found" });
@@ -592,4 +658,6 @@ module.exports = {
   getUserAppointment,
   dummyLoginUser,
   addEditAddressById,
+  getUserOrders,
+  deleteAddressByIndex
 };
