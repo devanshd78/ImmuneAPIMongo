@@ -588,6 +588,29 @@ async function getUserOrders(req, res) {
   }
 }
 
+async function getUserAppointment(req, res) {
+  const { id } = req.query;
+
+  if (!id) {
+    res.status(400).json({ status: "error", message: "Docter ID is required" });
+    return;
+  }
+  try {
+    const db = client.db("ImmunePlus");
+    const collection = db.collection("appointments");
+    const user = await collection.find({ patientId: parseInt(id) }).toArray();
+    if (user.length === 0) {
+      res.status(404).json({ status: "error", message: "User not found" });
+    } else {
+      res.json(user);
+    }
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Failed to fetch User", error: error.message });
+  }
+}
+
 async function dummyLoginUser(req, res) {
   const { phoneNumber } = req.body;
   let validations = [];
