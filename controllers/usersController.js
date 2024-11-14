@@ -122,7 +122,9 @@ async function loginUser(req, res) {
           res.status(400).json({ status: "error", message: "Invalid OTP" });
         }
       } else {
-        res.status(400).json({ status: "error", message: "OTP expired or invalid" });
+        res
+          .status(400)
+          .json({ status: "error", message: "OTP expired or invalid" });
       }
     } else {
       // Generate and send OTP
@@ -195,7 +197,7 @@ async function registerUser(req, res) {
   //     key: "addresses",
   //     message: "At least one address is required",
   //   });
-  
+
   if (validations.length) {
     res.status(400).json({ status: "error", validations: validations });
     return;
@@ -345,7 +347,9 @@ async function deleteAddressByIndex(req, res) {
   }
 
   if (index === undefined || index < 0) {
-    res.status(400).json({ status: "error", message: "Valid address index is required" });
+    res
+      .status(400)
+      .json({ status: "error", message: "Valid address index is required" });
     return;
   }
 
@@ -382,7 +386,9 @@ async function deleteAddressByIndex(req, res) {
           updatedAddresses,
         });
       } else {
-        res.status(400).json({ status: "error", message: "Failed to delete address" });
+        res
+          .status(400)
+          .json({ status: "error", message: "Failed to delete address" });
       }
     } else {
       res.status(400).json({
@@ -400,7 +406,6 @@ async function deleteAddressByIndex(req, res) {
     //await client.close();
   }
 }
-
 
 async function updateUser(req, res) {
   const {
@@ -569,15 +574,15 @@ async function getUserOrders(req, res) {
   const { id } = req.query;
 
   if (!id) {
-    res.status(400).json({ status: "error", message: "Docter ID is required" });
+    res.status(400).json({ status: "error", message: "User ID is required" });
     return;
   }
   try {
     const db = client.db("ImmunePlus");
     const collection = db.collection("Orders");
-    const user = await collection.find({ patientId: parseInt(id) }).toArray();
+    const user = await collection.find({ userId: id }).toArray();
     if (user.length === 0) {
-      res.status(404).json({ status: "error", message: "User not found" });
+      res.status(404).json({ status: "error", message: "No Orders found" });
     } else {
       res.json(user);
     }
@@ -682,5 +687,5 @@ module.exports = {
   dummyLoginUser,
   addEditAddressById,
   getUserOrders,
-  deleteAddressByIndex
+  deleteAddressByIndex,
 };
